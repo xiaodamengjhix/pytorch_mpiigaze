@@ -2,23 +2,22 @@ pipeline {
     agent any  // 使用任意可用节点
 
     stages {
-        // 阶段1：清除错误代理配置 + 拉取代码（自动使用 Job 配置的凭据）
+        // 阶段1：清除代理配置 + 拉取代码
         stage('Checkout Code') {
             steps {
-                // 清除可能存在的错误代理配置
                 bat 'git config --global --unset http.proxy || echo "No proxy to unset"'
                 bat 'git config --global --unset https.proxy || echo "No proxy to unset"'
-
-                // 不需要手动 withCredentials，Jenkins 会自动使用 Job 配置的 Git 凭据
-                checkout scm  // 自动拉取代码（使用 SCM 配置的仓库和凭据）
+                checkout scm  // 自动拉取代码
             }
         }
 
-        // 阶段2：运行测试
+        // 阶段2：运行测试（注意路径改为 jenkins_test/）
         stage('Run Hello Test') {
             steps {
-                bat 'python hello_test.py'
-                bat 'dir /b'  // 验证文件列表
+                dir('jenkins_test') {  // 进入子目录
+                    bat 'python hello_test.py'
+                    bat 'dir /b'      // 验证文件列表
+                }
             }
         }
     }
