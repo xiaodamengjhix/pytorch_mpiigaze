@@ -1,30 +1,58 @@
 pipeline {
-    agent any  // 使用任意可用节点
-
+    agent any
     stages {
-        // 阶段1：清除代理配置 + 拉取代码
         stage('Checkout Code') {
             steps {
-                bat 'git config --global --unset http.proxy || echo "No proxy to unset"'
-                bat 'git config --global --unset https.proxy || echo "No proxy to unset"'
-                checkout scm  // 自动拉取代码
+                // 安全地取消代理设置（忽略错误）
+                bat 'git config --global --unset http.proxy 2>nul & type nul'
+                bat 'git config --global --unset https.proxy 2>nul & type nul'
+                
+                // 强制拉取最新代码
+                checkout([
+                    $class: 'GitSCM',
+                    branches: [[name: '*/master']],
+                    extensions: [
+                        [$class: 'CleanBeforeCheckout'],
+                        [$class: 'CloneOption', depth: 0, noTags: false, shallow: false]
+                    ],
+                    userRemoteConfigs: [[
+                        url: 'https://github.com/xiaodamengjhix/pytorch_mpiigaze.git'
+                    ]]
+                ])
             }
         }
 
-        // 阶段2：运行测试（注意路径改为 jenkins_test/）
         stage('Run Hello Test') {
             steps {
-                dir('jenkins_test') {  // 进入子目录
-                    bat 'python hello_test.py'
-                    bat 'dir /b'      // 验证文件列表
+                script {
+                    // 严格验证文件存在
+                    if (!fileExists('jenkins_test/hello_test.py')) {
+                        error("致命错误：hello_test.py 文件不存在！")
+                    }
+                    
+                    dir('jenkins_test') {
+                        // 添加详细的错误处理
+                        bat '''
+                            python hello_test.py
+                            if %errorlevel% neq 0 (
+                                echo "测试执行失败，错误码: %errorlevel%"
+                                exit /b %errorlevel%
+                            )
+                        '''
+                    }
                 }
             }
         }
     }
-
     post {
         always {
-            echo '测试完成，请查看控制台输出'
+            echo '当前工作区文件列表：'
+            bat 'dir /s /b'
+        }
+        failure {
+            echo '构建失败！请检查：'
+            echo '1. jenkins_test/hello_test.py 是否存在'
+            echo '2. Python 环境是否配置正确'
         }
     }
 }
